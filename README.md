@@ -2,7 +2,7 @@
 
 Edit extruder filament colors in `.3mf` (3D Manufacturing Format) files.
 
-![3MF Toolset Screenshot](screenshots/screenshot.png)
+![3MF Toolset Screenshot](screenshots/Interface.png)
 
 ## Features
 
