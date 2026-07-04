@@ -2,6 +2,8 @@
 
 Edit extruder filament colors in `.3mf` (3D Manufacturing Format) files.
 
+![3MF Toolset Screenshot](screenshots/screenshot.png)
+
 ## Features
 
 - Open and edit `filament_colour` values in `.3mf` project files
