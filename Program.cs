@@ -765,6 +765,7 @@ namespace ThreeMFToolset
             MessageBox.Show(
                 "3MF Toolset v1.0\n\n" +
                 "Edit extruder filament colors in .3mf files.\n\n" +
+                "Source: https://github.com/jharbin/3MFToolset\n" +
                 "Built with .NET Framework 4.x + WinForms\n" +
                 "3MF is a trademark of the 3MF Consortium",
                 "About 3MF Toolset",
