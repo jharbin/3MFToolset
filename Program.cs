@@ -762,15 +762,70 @@ namespace ThreeMFToolset
 
         private void ShowAbout()
         {
-            MessageBox.Show(
-                "3MF Toolset v1.0\n\n" +
-                "Edit extruder filament colors in .3mf files.\n\n" +
-                "Source: https://github.com/jharbin/3MFToolset\n" +
-                "Built with .NET Framework 4.x + WinForms\n" +
-                "3MF is a trademark of the 3MF Consortium",
-                "About 3MF Toolset",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+            var about = new Form
+            {
+                Text = "About 3MF Toolset",
+                Size = new Size(400, 220),
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                StartPosition = FormStartPosition.CenterParent,
+                ShowIcon = false,
+                ShowInTaskbar = false,
+            };
+
+            var label = new Label
+            {
+                Text = "3MF Toolset v1.0",
+                Font = new Font("Segoe UI", 14, FontStyle.Bold),
+                Location = new Point(20, 16),
+                AutoSize = true,
+            };
+            about.Controls.Add(label);
+
+            var desc = new Label
+            {
+                Text = "Edit extruder filament colors in .3mf files.",
+                Font = new Font("Segoe UI", 9),
+                Location = new Point(20, 46),
+                AutoSize = true,
+            };
+            about.Controls.Add(desc);
+
+            var link = new LinkLabel
+            {
+                Text = "https://github.com/jharbin/3MFToolset",
+                Font = new Font("Segoe UI", 9),
+                Location = new Point(20, 72),
+                AutoSize = true,
+            };
+            link.LinkClicked += (s, e) =>
+            {
+                link.LinkVisited = true;
+                Process.Start("https://github.com/jharbin/3MFToolset");
+            };
+            about.Controls.Add(link);
+
+            var tm = new Label
+            {
+                Text = "3MF is a trademark of the 3MF Consortium",
+                Font = new Font("Segoe UI", 8),
+                ForeColor = Color.Gray,
+                Location = new Point(20, 100),
+                AutoSize = true,
+            };
+            about.Controls.Add(tm);
+
+            var ok = new Button
+            {
+                Text = "OK",
+                DialogResult = DialogResult.OK,
+                Location = new Point(310, 148),
+                Size = new Size(60, 26),
+            };
+            about.Controls.Add(ok);
+
+            about.ShowDialog(this);
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
