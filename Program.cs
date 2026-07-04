@@ -57,19 +57,26 @@ namespace ThreeMFToolset
         private Button pickColorButton;
         private Button moveUpButton;
         private Button moveDownButton;
+        private Button addExtruderButton;
+        private Button removeExtruderButton;
         private Label statusLabel;
+        private Label statusLoadedPrefixLabel;
+        private Label statusLoadedLabel;
+        private Label statusNowLabel;
         private string currentFilePath;
         private List<ColorEntry> colorEntries;
-        private int dragSourceIndex = -1;
-        private Point dragStartPoint;
+        private int originalExtruderCount;
+        private bool shouldClose;
 
         private const string FILAMENT_COLOUR_PATTERN = @"""filament_colour"":\s*\[([^\]]*)\]";
+        private const int MIN_EXTRUDERS = 1;
+        private const int MAX_EXTRUDERS = 16;
 
         public MainForm(string filePath = null)
         {
             this.Text = "3MF Toolset";
-            this.Size = new Size(550, 520);
-            this.MinimumSize = new Size(450, 400);
+            this.Size = new Size(650, 520);
+            this.MinimumSize = new Size(540, 400);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.Icon = CreateAppIcon();
 
@@ -78,6 +85,19 @@ namespace ThreeMFToolset
 
             if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
                 LoadFile(filePath);
+            else
+            {
+                OpenFile();
+                if (colorEntries == null)
+                    shouldClose = true;
+            }
+        }
+
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
+            if (shouldClose)
+                Close();
         }
 
         private Icon CreateAppIcon()
@@ -197,16 +217,15 @@ namespace ThreeMFToolset
                 DrawMode = DrawMode.OwnerDrawVariable,
                 ItemHeight = 48,
                 Font = new Font("Segoe UI", 10),
-                AllowDrop = true,
             };
             colorListBox.DrawItem += ColorListBox_DrawItem;
             colorListBox.MeasureItem += ColorListBox_MeasureItem;
             colorListBox.SelectedIndexChanged += ColorListBox_SelectedIndexChanged;
             colorListBox.MouseDown += ColorListBox_MouseDown;
-            colorListBox.MouseMove += ColorListBox_MouseMove;
-            colorListBox.DragOver += ColorListBox_DragOver;
-            colorListBox.DragDrop += ColorListBox_DragDrop;
             mainPanel.Controls.Add(colorListBox, 0, 1);
+
+            CreateContextMenu();
+            colorListBox.ContextMenuStrip = extruderMenu;
 
             // Bottom controls
             var bottomPanel = new FlowLayoutPanel
@@ -237,6 +256,7 @@ namespace ThreeMFToolset
                 MaxLength = 7,
                 Text = "#",
                 Margin = new Padding(2, 6, 2, 0),
+                Enabled = false,
             };
             hexTextBox.TextChanged += HexTextBox_TextChanged;
             bottomPanel.Controls.Add(hexTextBox);
@@ -256,6 +276,7 @@ namespace ThreeMFToolset
                 Size = new Size(100, 30),
                 Margin = new Padding(2, 6, 2, 0),
                 UseVisualStyleBackColor = true,
+                Enabled = false,
             };
             pickColorButton.Click += PickColorButton_Click;
             bottomPanel.Controls.Add(pickColorButton);
@@ -286,6 +307,7 @@ namespace ThreeMFToolset
                 Margin = new Padding(0),
                 UseVisualStyleBackColor = true,
                 Font = new Font("Segoe UI", 10),
+                Enabled = false,
             };
             moveUpButton.Click += MoveUpButton_Click;
             moveGroup.Controls.Add(moveUpButton);
@@ -297,22 +319,106 @@ namespace ThreeMFToolset
                 Margin = new Padding(0),
                 UseVisualStyleBackColor = true,
                 Font = new Font("Segoe UI", 10),
+                Enabled = false,
             };
             moveDownButton.Click += MoveDownButton_Click;
             moveGroup.Controls.Add(moveDownButton);
 
             bottomPanel.Controls.Add(moveGroup);
 
+            var extGroup = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Margin = new Padding(6, 6, 0, 0),
+            };
+
+            var extLabel = new Label
+            {
+                Text = "Extruder:",
+                TextAlign = ContentAlignment.MiddleLeft,
+                AutoSize = true,
+                Font = new Font("Segoe UI", 9),
+                Margin = new Padding(0, 5, 2, 0),
+            };
+            extGroup.Controls.Add(extLabel);
+
+            addExtruderButton = new Button
+            {
+                Text = "+",
+                Size = new Size(30, 30),
+                Margin = new Padding(0),
+                UseVisualStyleBackColor = true,
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                Enabled = false,
+            };
+            addExtruderButton.Click += AddExtruderButton_Click;
+            extGroup.Controls.Add(addExtruderButton);
+
+            removeExtruderButton = new Button
+            {
+                Text = "-",
+                Size = new Size(30, 30),
+                Margin = new Padding(0),
+                UseVisualStyleBackColor = true,
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                Enabled = false,
+            };
+            removeExtruderButton.Click += RemoveExtruderButton_Click;
+            extGroup.Controls.Add(removeExtruderButton);
+
+            bottomPanel.Controls.Add(extGroup);
+
             mainPanel.Controls.Add(bottomPanel, 0, 2);
+
+            var statusPanel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                Margin = new Padding(0),
+                Padding = new Padding(0),
+            };
+
+            statusLoadedPrefixLabel = new Label
+            {
+                AutoSize = true,
+                Font = new Font("Segoe UI", 8, FontStyle.Bold),
+                ForeColor = Color.Gray,
+                TextAlign = ContentAlignment.MiddleLeft,
+            };
+            statusPanel.Controls.Add(statusLoadedPrefixLabel);
+
+            statusLoadedLabel = new Label
+            {
+                AutoSize = true,
+                Font = new Font("Segoe UI", 8),
+                ForeColor = Color.Gray,
+                TextAlign = ContentAlignment.MiddleLeft,
+            };
+            statusPanel.Controls.Add(statusLoadedLabel);
+
+            statusNowLabel = new Label
+            {
+                AutoSize = true,
+                Font = new Font("Segoe UI", 8, FontStyle.Bold),
+                ForeColor = Color.Gray,
+                TextAlign = ContentAlignment.MiddleLeft,
+            };
+            statusPanel.Controls.Add(statusNowLabel);
 
             statusLabel = new Label
             {
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft,
+                AutoSize = true,
                 Font = new Font("Segoe UI", 8),
                 ForeColor = Color.Gray,
+                TextAlign = ContentAlignment.MiddleLeft,
             };
-            mainPanel.Controls.Add(statusLabel, 0, 3);
+            statusPanel.Controls.Add(statusLabel);
+
+            mainPanel.Controls.Add(statusPanel, 0, 3);
 
             this.Controls.Add(mainPanel);
         }
@@ -326,52 +432,77 @@ namespace ThreeMFToolset
         {
             if (e.Index < 0 || colorEntries == null || e.Index >= colorEntries.Count) return;
             var entry = colorEntries[e.Index];
-
-            e.DrawBackground();
+            bool isDefined = !string.IsNullOrEmpty(entry.Hex);
+            bool isSelected = (e.State & DrawItemState.Selected) != 0;
 
             var rect = e.Bounds;
             var g = e.Graphics;
 
+            // Draw background
+            using (var brush = new SolidBrush(isSelected ? SystemColors.Highlight : Color.White))
+            {
+                g.FillRectangle(brush, rect);
+            }
+
             // Draw swatch
             var swatchRect = new Rectangle(rect.X + 8, rect.Y + 6, 36, 36);
-            using (var brush = new SolidBrush(entry.Color))
+            if (isDefined)
             {
-                g.FillRectangle(brush, swatchRect);
+                using (var brush = new SolidBrush(entry.Color))
+                {
+                    g.FillRectangle(brush, swatchRect);
+                }
+            }
+            else
+            {
+                using (var brush = new SolidBrush(Color.FromArgb(220, 220, 220)))
+                {
+                    g.FillRectangle(brush, swatchRect);
+                }
+                using (var pen = new Pen(Color.FromArgb(180, 180, 180)))
+                {
+                    g.DrawLine(pen, swatchRect.Left, swatchRect.Top, swatchRect.Right, swatchRect.Bottom);
+                    g.DrawLine(pen, swatchRect.Left, swatchRect.Bottom, swatchRect.Right, swatchRect.Top);
+                }
             }
             g.DrawRectangle(Pens.DarkGray, swatchRect);
 
             // Draw extruder number
             using (var font = new Font("Segoe UI", 10, FontStyle.Bold))
-            using (var brush = new SolidBrush(e.ForeColor))
+            using (var brush = new SolidBrush(isSelected ? SystemColors.HighlightText : e.ForeColor))
             {
                 g.DrawString("Extruder " + entry.Extruder, font, brush,
                     rect.X + 52, rect.Y + 6);
             }
 
-            // Draw hex value
-            using (var font = new Font("Consolas", 10))
-            using (var brush = new SolidBrush(Color.Gray))
+            // Draw hex value or "Not defined"
+            if (isDefined)
             {
-                g.DrawString(entry.Hex, font, brush,
-                    rect.X + 52, rect.Y + 26);
-            }
-
-            // Draw selection highlight
-            if ((e.State & DrawItemState.Selected) != 0)
-            {
-                using (var highlight = new SolidBrush(Color.FromArgb(60, SystemColors.Highlight)))
+                using (var font = new Font("Consolas", 10))
+                using (var brush = new SolidBrush(isSelected ? SystemColors.HighlightText : Color.Gray))
                 {
-                    g.FillRectangle(highlight, e.Bounds);
+                    g.DrawString(entry.Hex, font, brush,
+                        rect.X + 52, rect.Y + 26);
                 }
-                g.DrawRectangle(SystemPens.Highlight,
-                    e.Bounds.X, e.Bounds.Y, e.Bounds.Width - 1, e.Bounds.Height - 1);
+            }
+            else
+            {
+                using (var font = new Font("Segoe UI", 10, FontStyle.Italic))
+                using (var brush = new SolidBrush(isSelected ? SystemColors.HighlightText : Color.FromArgb(160, 160, 160)))
+                {
+                    g.DrawString("Not defined", font, brush,
+                        rect.X + 52, rect.Y + 26);
+                }
             }
 
-            // Draw drag handle hint
-            using (var font = new Font("Segoe UI", 8))
-            using (var brush = new SolidBrush(Color.FromArgb(180, 180, 180)))
+            // Draw selection border
+            if (isSelected)
             {
-                g.DrawString("\u2261", font, brush, rect.Right - 20, rect.Y + 14);
+                using (var borderPen = new Pen(SystemColors.Highlight, 2))
+                {
+                    g.DrawRectangle(borderPen,
+                        rect.X, rect.Y, rect.Width - 1, rect.Height - 1);
+                }
             }
 
             e.DrawFocusRectangle();
@@ -383,12 +514,14 @@ namespace ThreeMFToolset
                 colorListBox.SelectedIndex < colorEntries.Count)
             {
                 var entry = colorEntries[colorListBox.SelectedIndex];
-                hexTextBox.Text = entry.Hex;
-                swatchPanel.BackColor = entry.Color;
+                hexTextBox.Text = string.IsNullOrEmpty(entry.Hex) ? "#" : entry.Hex;
+                swatchPanel.BackColor = string.IsNullOrEmpty(entry.Hex) ? Color.White : entry.Color;
                 hexTextBox.Enabled = true;
                 pickColorButton.Enabled = true;
                 moveUpButton.Enabled = colorListBox.SelectedIndex > 0;
                 moveDownButton.Enabled = colorListBox.SelectedIndex < colorEntries.Count - 1;
+                addExtruderButton.Enabled = colorEntries.Count < MAX_EXTRUDERS;
+                removeExtruderButton.Enabled = colorEntries.Count > MIN_EXTRUDERS;
             }
             else
             {
@@ -396,67 +529,57 @@ namespace ThreeMFToolset
                 pickColorButton.Enabled = false;
                 moveUpButton.Enabled = false;
                 moveDownButton.Enabled = false;
+                addExtruderButton.Enabled = false;
+                removeExtruderButton.Enabled = false;
             }
         }
 
-        // Drag and drop reordering
+        private ContextMenuStrip extruderMenu;
+
+        private void CreateContextMenu()
+        {
+            extruderMenu = new ContextMenuStrip();
+
+            var moveUpItem = extruderMenu.Items.Add("Move Up") as ToolStripMenuItem;
+            moveUpItem.ShortcutKeyDisplayString = "Ctrl+Up";
+            moveUpItem.Click += (s, e) => MoveUpButton_Click(null, null);
+
+            var moveDownItem = extruderMenu.Items.Add("Move Down") as ToolStripMenuItem;
+            moveDownItem.ShortcutKeyDisplayString = "Ctrl+Down";
+            moveDownItem.Click += (s, e) => MoveDownButton_Click(null, null);
+
+            extruderMenu.Items.Add(new ToolStripSeparator());
+
+            var deleteItem = extruderMenu.Items.Add("Delete Extruder") as ToolStripMenuItem;
+            deleteItem.Click += (s, e) => RemoveExtruderButton_Click(null, null);
+        }
+
         private void ColorListBox_MouseDown(object sender, MouseEventArgs e)
         {
-            if (colorEntries == null) return;
-            int index = colorListBox.IndexFromPoint(e.Location);
-            if (index >= 0 && index < colorEntries.Count)
+            if (e.Button == MouseButtons.Right && colorEntries != null)
             {
-                dragSourceIndex = index;
-                dragStartPoint = e.Location;
+                int index = colorListBox.IndexFromPoint(e.Location);
+                if (index >= 0 && index < colorEntries.Count)
+                    colorListBox.SelectedIndex = index;
             }
         }
 
-        private void ColorListBox_MouseMove(object sender, MouseEventArgs e)
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
-            if (e.Button == MouseButtons.Left && dragSourceIndex >= 0 && colorEntries != null)
+            if (colorEntries != null)
             {
-                var dragSize = SystemInformation.DragSize;
-                var dragRect = new Rectangle(dragStartPoint.X - dragSize.Width / 2,
-                    dragStartPoint.Y - dragSize.Height / 2, dragSize.Width, dragSize.Height);
-                if (!dragRect.Contains(e.Location))
+                if (keyData == (Keys.Control | Keys.Up))
                 {
-                    colorListBox.DoDragDrop(dragSourceIndex, DragDropEffects.Move);
-                    dragSourceIndex = -1;
+                    MoveUpButton_Click(null, null);
+                    return true;
+                }
+                if (keyData == (Keys.Control | Keys.Down))
+                {
+                    MoveDownButton_Click(null, null);
+                    return true;
                 }
             }
-            else if (e.Button == MouseButtons.None)
-            {
-                dragSourceIndex = -1;
-            }
-        }
-
-        private void ColorListBox_DragOver(object sender, DragEventArgs e)
-        {
-            e.Effect = DragDropEffects.Move;
-            int index = colorListBox.IndexFromPoint(colorListBox.PointToClient(new Point(e.X, e.Y)));
-            if (index >= 0 && index < colorListBox.Items.Count)
-                colorListBox.SelectedIndex = index;
-        }
-
-        private void ColorListBox_DragDrop(object sender, DragEventArgs e)
-        {
-            if (dragSourceIndex < 0 || colorEntries == null) return;
-            int targetIndex = colorListBox.IndexFromPoint(colorListBox.PointToClient(new Point(e.X, e.Y)));
-            if (targetIndex < 0 || targetIndex >= colorEntries.Count) return;
-            if (dragSourceIndex == targetIndex) return;
-
-            var item = colorEntries[dragSourceIndex];
-            colorEntries.RemoveAt(dragSourceIndex);
-            colorEntries.Insert(targetIndex, item);
-
-            // Renumber extruders
-            for (int i = 0; i < colorEntries.Count; i++)
-                colorEntries[i].Extruder = i + 1;
-
-            RefreshList();
-            colorListBox.SelectedIndex = targetIndex;
-            dragSourceIndex = -1;
-            SetModified();
+            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         private void MoveUpButton_Click(object sender, EventArgs e)
@@ -501,8 +624,47 @@ namespace ThreeMFToolset
             entry.Hex = text.ToUpper();
             entry.Color = ColorEntry.HexToColor(text);
             swatchPanel.BackColor = entry.Color;
-            RefreshList();
+            colorListBox.Refresh();
             SetModified();
+        }
+
+        private void AddExtruderButton_Click(object sender, EventArgs e)
+        {
+            if (colorEntries == null || colorEntries.Count >= MAX_EXTRUDERS) return;
+
+            colorEntries.Add(new ColorEntry
+            {
+                Extruder = colorEntries.Count + 1,
+                Hex = "",
+                Color = Color.White,
+            });
+            RefreshList();
+            colorListBox.SelectedIndex = colorEntries.Count - 1;
+            SetModified();
+            UpdateStatus();
+        }
+
+        private void RemoveExtruderButton_Click(object sender, EventArgs e)
+        {
+            if (colorEntries == null) return;
+
+            if (colorEntries.Count <= MIN_EXTRUDERS)
+            {
+                MessageBox.Show("There must be at least 1 extruder.", "Cannot Remove",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            int idx = colorListBox.SelectedIndex;
+            if (idx < 0 || idx >= colorEntries.Count) return;
+
+            colorEntries.RemoveAt(idx);
+            for (int i = 0; i < colorEntries.Count; i++)
+                colorEntries[i].Extruder = i + 1;
+            RefreshList();
+            colorListBox.SelectedIndex = Math.Min(idx, colorEntries.Count - 1);
+            SetModified();
+            UpdateStatus();
         }
 
         private void PickColorButton_Click(object sender, EventArgs e)
@@ -549,7 +711,6 @@ namespace ThreeMFToolset
 
                     if (configEntry == null)
                     {
-                        // Try to find filament_colour in any config
                         configEntry = zip.Entries
                             .FirstOrDefault(e => e.Name.EndsWith(".config", StringComparison.OrdinalIgnoreCase)
                                 && e.FullName.Contains("project"));
@@ -569,31 +730,47 @@ namespace ThreeMFToolset
 
                 // Parse filament_colour array
                 var match = Regex.Match(jsonContent, FILAMENT_COLOUR_PATTERN);
-                if (!match.Success)
+                if (match.Success)
                 {
-                    MessageBox.Show("Could not find filament_colour data in the configuration.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
+                    var rawValues = match.Groups[1].Value
+                        .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(h => h.Trim().Trim('"', ' ', '\r', '\n', '\t'))
+                        .ToList();
+
+                    for (int i = 0; i < rawValues.Count && i < MAX_EXTRUDERS; i++)
+                    {
+                        var hex = rawValues[i];
+                        if (Regex.IsMatch(hex, "^#[0-9A-Fa-f]{6}$"))
+                        {
+                            entries.Add(new ColorEntry
+                            {
+                                Extruder = i + 1,
+                                Hex = hex.ToUpper(),
+                                Color = ColorEntry.HexToColor(hex),
+                            });
+                        }
+                        else
+                        {
+                            entries.Add(new ColorEntry
+                            {
+                                Extruder = i + 1,
+                                Hex = "",
+                                Color = Color.White,
+                            });
+                        }
+                    }
                 }
 
-                var hexValues = match.Groups[1].Value
-                    .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(h => h.Trim().Trim('"', ' ', '\r', '\n', '\t'))
-                    .Where(h => Regex.IsMatch(h, "^#[0-9A-Fa-f]{6}$"))
-                    .ToList();
+                originalExtruderCount = entries.Count;
 
-                if (hexValues.Count == 0)
-                {
-                    MessageBox.Show("No valid hex color values found.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-
-                for (int i = 0; i < hexValues.Count; i++)
+                // Ensure minimum number of extruders
+                while (entries.Count < MIN_EXTRUDERS)
                 {
                     entries.Add(new ColorEntry
                     {
-                        Extruder = i + 1,
-                        Hex = hexValues[i].ToUpper(),
-                        Color = ColorEntry.HexToColor(hexValues[i]),
+                        Extruder = entries.Count + 1,
+                        Hex = "",
+                        Color = Color.White,
                     });
                 }
 
@@ -603,8 +780,7 @@ namespace ThreeMFToolset
                 if (colorEntries.Count > 0)
                     colorListBox.SelectedIndex = 0;
 
-                statusLabel.Text = "Loaded: " + Path.GetFileName(filePath) + " — " + colorEntries.Count + " extruders";
-                statusLabel.ForeColor = Color.Gray;
+                UpdateStatus();
                 this.Text = "3MF Toolset — " + Path.GetFileName(filePath);
             }
             catch (Exception ex)
@@ -627,6 +803,16 @@ namespace ThreeMFToolset
             modified = true;
             if (!this.Text.EndsWith(" *"))
                 this.Text += " *";
+        }
+
+        private void UpdateStatus()
+        {
+            if (colorEntries == null || string.IsNullOrEmpty(currentFilePath)) return;
+            int definedCount = colorEntries.Count(e => !string.IsNullOrEmpty(e.Hex));
+            statusLoadedPrefixLabel.Text = "Loaded:";
+            statusLoadedLabel.Text = " " + Path.GetFileName(currentFilePath) + "  —  " + originalExtruderCount + " original  |  ";
+            statusNowLabel.Text = "Now:";
+            statusLabel.Text = " " + colorEntries.Count + " extruders (" + definedCount + " defined)";
         }
 
         private void SaveFile()
@@ -665,7 +851,7 @@ namespace ThreeMFToolset
 
                 // Build new filament_colour JSON array
                 var newColors = "[" + string.Join(", ",
-                    colorEntries.Select(e => "\"" + e.Hex + "\"")) + "]";
+                    colorEntries.Select(e => string.IsNullOrEmpty(e.Hex) ? "\"\"" : "\"" + e.Hex + "\"")) + "]";
 
                 // Read original zip
                 string jsonContent;
