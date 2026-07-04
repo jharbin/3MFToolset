@@ -1,6 +1,9 @@
 # Ignore build artifacts in root
 /*.exe
 
+# Documentation (local reference files)
+/Documentation/
+
 # Temp files
 *.tmp
 *.log
